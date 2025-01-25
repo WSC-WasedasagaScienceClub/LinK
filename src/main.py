@@ -8,6 +8,7 @@ import os
 from dotenv import load_dotenv
 from google_auth_oauthlib.flow import InstalledAppFlow
 import webbrowser
+import requests
 
 load_dotenv()
 
@@ -219,6 +220,7 @@ def main(page: ft.Page):
     page.bgcolor = ft.Colors.BLACK87
 
     def route_change(route):
+        print(f"Route changed to: {route.route}")
         troute = ft.TemplateRoute(route.route)
         page.views.clear()
 
@@ -227,6 +229,7 @@ def main(page: ft.Page):
         elif troute.match("/login"):
             page.views.append(Login(page))
         elif troute.match("/home"):
+            print("Navigating to Home view")
             page.views.append(Home(page))
         elif troute.match("/Settings"):
             page.views.append(Settings(page))
@@ -235,10 +238,43 @@ def main(page: ft.Page):
             waseque = next((w for w in sample_waseques if w.number == number), None)
             if waseque:
                 page.views.append(view_waseque_details(page, waseque))
-        
+        elif troute.match("/api/oauth/redirect"):
+            print("Handling OAuth redirect")
+            query_params = troute.query_parameters
+            code = query_params.get('code')
+            if code:
+                try:
+                    token_url = "https://oauth2.googleapis.com/token"
+                    token_data = {
+                        'code': code,
+                        'client_id': ClientID,
+                        'client_secret': ClientSecret,
+                        'redirect_uri': RedirectUrl,
+                        'grant_type': 'authorization_code'
+                    }
+                    token_response = requests.post(token_url, data=token_data)
+                    token_response.raise_for_status()
+                    token_json = token_response.json()
+                    access_token = token_json.get('access_token')
+
+                    if access_token:
+                        user_info_url = "https://www.googleapis.com/oauth2/v1/userinfo"
+                        user_info_params = {'access_token': access_token}
+                        user_info_response = requests.get(user_info_url, params=user_info_params)
+                        user_info_response.raise_for_status()
+                        user_info = user_info_response.json()
+                        user_email = user_info.get('email', 'No email found')
+                        print(f"User email: {user_email}")
+                        page.go(f"/home?email={user_email}")
+                    else:
+                        print("Failed to obtain access token.")
+                except requests.exceptions.RequestException as err:
+                    print(f"Error during token exchange or user info retrieval: {err}")
+
         page.update()
 
     def view_pop(view):
+        print("Popping view")
         page.views.pop()
         top_view = page.views[-1]
         page.go(top_view.route)
@@ -248,167 +284,17 @@ def main(page: ft.Page):
     page.go(page.route)
 
 def Home(page: ft.Page):
-    def handle_waseque_click(e):
-        waseque_number = e.control.data
-        page.go(f"/waseque/{waseque_number}")
-
-    def handle_rail_change(e):
-        selected_index = e.control.selected_index
-        if selected_index == 0:
-            page.go("/home")
-        elif selected_index == 1:
-            page.go("/Settings")
-        elif selected_index == 2:
-            page.go("/community")
-        elif selected_index == 3:
-            page.go("/messages")
-
-    rail = ft.NavigationRail(
-        selected_index=0,
-        label_type=ft.NavigationRailLabelType.ALL,
-        min_width=100,
-        min_extended_width=200,
-        height=700,
-        bgcolor=ft.Colors.BLACK54,
-        leading=ft.Container(
-            content=ft.Image(
-                src="images/logos/50px_white.png",
-                width=50,
-                height=50,
-                fit=ft.ImageFit.CONTAIN,
-            ),
-            margin=ft.margin.only(bottom=20),
-        ),
-        group_alignment=-0.9,
-        on_change=handle_rail_change,  # イベントハンドラを追加
-        destinations=[
-            ft.NavigationRailDestination(
-                icon=ft.Icons.DASHBOARD_OUTLINED,
-                selected_icon=ft.Icons.DASHBOARD,
-                label="Dashboard",
-            ),
-            ft.NavigationRailDestination(
-                icon=ft.Icons.SETTINGS_OUTLINED,
-                selected_icon=ft.Icons.SETTINGS,
-                label="Settings",
-            ),
-            ft.NavigationRailDestination(
-                icon=ft.Icons.PEOPLE_OUTLINED,
-                selected_icon=ft.Icons.PEOPLE,
-                label="Community",
-            ),
-            ft.NavigationRailDestination(
-                icon=ft.Icons.FORUM_OUTLINED,
-                selected_icon=ft.Icons.FORUM,
-                label="Messages",
-            ),
-        ],
-    )
-
-    # サンプル数を取得して、適切な数を選択
-    sample_size = min(5, len(sample_waseques))
-    
+    email = page.route.split("?email=")[-1]
     return ft.View(
         "/home",
         [
-            ft.Row(
-                [
-                    rail,
-                    ft.VerticalDivider(width=1),
-                    ft.Container(
-                        content=ft.Column(
-                            [
-                                ft.Container(
-                                    content=ft.Column(
-                                        [
-                                            # Today's Pickup
-                                            ft.Card(
-                                                content=ft.Container(
-                                                    content=ft.Column([
-                                                        ft.ListTile(
-                                                            leading=ft.Icon(ft.Icons.STAR_OUTLINED, color=ft.Colors.AMBER_400),
-                                                            title=ft.Text("Today's Pickup", size=20, weight=ft.FontWeight.BOLD),
-                                                        ),
-                                                        # Wasequeカードのリスト
-                                                        ft.GridView(
-                                                            controls=[
-                                                                ft.Card(
-                                                                    content=ft.ListTile(
-                                                                        leading=ft.Icon(ft.Icons.WORKSPACE_PREMIUM, color=ft.Colors.BLUE_400),
-                                                                        title=ft.Text(waseque.title, weight=ft.FontWeight.BOLD),
-                                                                        subtitle=ft.Text(f"#{waseque.number}"),
-                                                                        data=waseque.number,
-                                                                        on_click=handle_waseque_click,
-                                                                    ),
-                                                                )
-                                                                for waseque in random.sample(sample_waseques, sample_size)
-                                                            ],
-                                                            runs_count=1,
-                                                            spacing=10,
-                                                            run_spacing=10,
-                                                            height=400,
-                                                            child_aspect_ratio=5.0,
-                                                        ),
-                                                    ]),
-                                                    padding=10,
-                                                ),
-                                            ),
-                                            # Overview
-                                            ft.Card(
-                                                content=ft.Container(
-                                                    content=ft.Column([
-                                                        ft.ListTile(
-                                                            leading=ft.Icon(ft.Icons.ANALYTICS_OUTLINED, color=ft.Colors.BLUE_400),
-                                                            title=ft.Text("Overview", size=20, weight=ft.FontWeight.BOLD),
-                                                        ),
-                                                        ft.Row([
-                                                            ft.Card(
-                                                                content=ft.Container(
-                                                                    content=ft.Column([
-                                                                        ft.Text("Total Waseques", color=ft.Colors.GREY_500),
-                                                                        ft.Text(str(len(sample_waseques)), size=32, weight=ft.FontWeight.BOLD),
-                                                                    ], spacing=5),
-                                                                    padding=15,
-                                                                ),
-                                                                width=150,
-                                                            ),
-                                                            ft.Card(
-                                                                content=ft.Container(
-                                                                    content=ft.Column([
-                                                                        ft.Text("Active Projects", color=ft.Colors.GREY_500),
-                                                                        ft.Text("28", size=32, weight=ft.FontWeight.BOLD),
-                                                                    ], spacing=5),
-                                                                    padding=15,
-                                                                ),
-                                                                width=150,
-                                                            ),
-                                                        ], spacing=20),
-                                                    ]),
-                                                    padding=20,
-                                                ),
-                                            ),
-                                        ],
-                                        spacing=20,
-                                        scroll=ft.ScrollMode.ALWAYS,
-                                        expand=True,
-                                    ),
-                                    expand=True,
-                                    padding=20,
-                                ),
-                            ],
-                            expand=True,
-                        ),
-                        expand=True,
-                    ),
-                ],
-                expand=True,
-            ),
-        ],
+            ft.Text(f"Welcome to Home Page! Email: {email}")
+        ]
     )
 
 def Login(page: ft.Page):
     page.title = "LinK"
-    page.bgcolor = ft.Colors.BLACK87  # 背景色を暗めに設定
+    page.bgcolor = ft.Colors.BLACK87
 
     provider = GoogleOAuthProvider(
         client_id=ClientID,
@@ -416,15 +302,15 @@ def Login(page: ft.Page):
         redirect_url=RedirectUrl
     )
 
-    # ログイン処理
     def login_google(e):
+        print("Attempting to log in...")
+        # ポップアップを使用せずにログイン
         page.login(provider)
 
-    # ログアウト処理
     def logout_google(e):
+        print("Logging out...")
         page.logout()
 
-    # ログインボタン
     login_button = Container(
         content=ElevatedButton(
             "Sign in with Google", bgcolor=ft.Colors.LIGHT_BLUE_500, color=ft.Colors.WHITE, on_click=login_google,
@@ -432,18 +318,14 @@ def Login(page: ft.Page):
         margin=ft.margin.only(right=10)
     )
 
-    # ログアウトボタン
-    logout_button = Container(
-        content=ElevatedButton(
-            "Sign out Google", bgcolor=ft.Colors.RED_300, color=ft.Colors.WHITE, on_click=logout_google),
-        margin=ft.margin.only(right=10)
-    )
-
     def on_login(e):
-        print(page.auth.user['name'], page.auth.user['email'])
-        page.go("/home")
+        print("Login successful!")
+        user_email = page.auth.user.get('email', 'No email found')
+        print(f"User email: {user_email}")
+        page.go(f"/home?email={user_email}")
 
     def on_logout(e):
+        print("Logged out.")
         page.go("/logout")
 
     page.on_login = on_login
@@ -460,7 +342,7 @@ def Login(page: ft.Page):
                                 content=ft.Column(
                                     [
                                         ft.Image(
-                                            src="assets/50px_white.png",
+                                            src="images/logos/50px_white.png",
                                             width=150,
                                             height=150,
                                             fit=ft.ImageFit.CONTAIN,
