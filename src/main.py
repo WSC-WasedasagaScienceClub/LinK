@@ -219,6 +219,12 @@ def main(page: ft.Page):
     page.title = "LinK"
     page.bgcolor = ft.Colors.BLACK87
 
+    provider = GoogleOAuthProvider(
+        client_id=ClientID,
+        client_secret=ClientSecret,
+        redirect_url=RedirectUrl
+    )
+
     def route_change(route):
         print(f"Route changed to: {route.route}")
         troute = ft.TemplateRoute(route.route)
@@ -296,16 +302,18 @@ def Login(page: ft.Page):
     page.title = "LinK"
     page.bgcolor = ft.Colors.BLACK87
 
-    provider = GoogleOAuthProvider(
-        client_id=ClientID,
-        client_secret=ClientSecret,
-        redirect_url=RedirectUrl
-    )
-
     def login_google(e):
         print("Attempting to log in...")
-        # ポップアップを使用せずにログイン
-        page.login(provider)
+        # Fletのlaunch_urlを使用してリダイレクト
+        auth_url = (
+            "https://accounts.google.com/o/oauth2/auth"
+            f"?client_id={ClientID}"
+            f"&redirect_uri={RedirectUrl}"
+            "&response_type=code"
+            "&scope=email%20profile%20openid"
+            "&access_type=offline"
+        )
+        page.launch_url(auth_url)
 
     def logout_google(e):
         print("Logging out...")
@@ -319,14 +327,23 @@ def Login(page: ft.Page):
     )
 
     def on_login(e):
-        print("Login successful!")
-        user_email = page.auth.user.get('email', 'No email found')
-        print(f"User email: {user_email}")
-        page.go(f"/home?email={user_email}")
+        if e.error:
+            print("Login error:", e.error)
+        else:
+            user_email = page.auth.user.get('email', 'No email found')
+            print(f"User email: {user_email}")
+            page.go(f"/home?email={user_email}")
 
     def on_logout(e):
         print("Logged out.")
         page.go("/logout")
+
+    login_button = Container(
+        content=ElevatedButton(
+            "Sign in with Google", bgcolor=ft.Colors.LIGHT_BLUE_500, color=ft.Colors.WHITE, on_click=login_google,
+        ),
+        margin=ft.margin.only(right=10)
+    )
 
     page.on_login = on_login
     page.on_logout = on_logout
